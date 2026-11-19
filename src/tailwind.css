@@ -1,0 +1,27 @@
+/*
+  Tailwind for shadcn/ui - theme tokens + utilities ONLY.
+  The preflight (CSS reset) is intentionally NOT imported, so the hand-written
+  styles in style.css keep rendering exactly as before.
+*/
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/* shadcn tokens -> the app's own CSS variables (defined in style.css) */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --color-card: var(--card);
+  --color-primary: var(--brand);
+  --color-muted: var(--bg-2);
+  --color-muted-foreground: var(--muted);
+  --color-border: var(--line);
+  --color-ring: var(--brand);
+  --color-destructive: var(--err);
+  --color-glass: var(--glass);
+  --color-glass-strong: var(--glass-strong);
+  --color-glass-border: var(--glass-border);
+  --radius-lg: 14px;
+  --radius-md: 12px;
+  --radius-sm: 10px;
+}

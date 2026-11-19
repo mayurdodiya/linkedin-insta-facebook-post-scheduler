@@ -1,1 +1,93 @@
-# linkedin-insta-facebook-post-scheduler
+# Social Post Scheduler
+
+Plan a whole month of social posts once; the server publishes them to LinkedIn, Instagram, and Facebook Pages for you.
+
+**Stack:** Next.js (App Router, one project: UI + `/api` route handlers) · MongoDB (Mongoose) · Vercel Blob media storage (local disk in dev) · Vercel Cron scheduler
+
+## Flow
+1. Sign up / log in with email + password or Google OAuth.
+2. Dashboard → connect LinkedIn, Instagram, and/or a Facebook Page.
+3. **Plan posts** → click a day → pick a slot (9:00–19:00, hourly, in your timezone) → text + images
+   (up to 9, or 10 for Facebook-only posts) or one MP4.
+   Pick one network or any combination - connected networks are selected by default, so one composer can publish to all of them.
+   Choose **One post per day** to upload up to 30 photos at once: each photo becomes its own post, one per consecutive day
+   at the same time (10:00 by default), with an optional caption per photo. Days whose slot is already taken are skipped and
+   reported in the composer.
+4. The scheduler (Vercel Cron → `/api/cron/scheduler`) runs every 15 minutes, claims due posts atomically, and publishes through each network's API.
+   Transient errors retry up to 3 times; an expired connection or a missed window (> `MISSED_GRACE_HOURS`) marks the post **failed** with the reason shown in the UI.
+
+> The scheduler polls every 15 min (not hourly) because a slot like 9:00 in IST is 03:30 UTC - an hourly UTC tick would publish it 30 min late.
+
+## Project layout
+```
+src/app/            pages (login, dashboard, planner) + api/ route handlers (auth, posts, linkedin, instagram, facebook, cron) + uploads/ (local-disk media)
+src/views, src/components, src/api.ts, src/auth.tsx, src/theme.tsx, src/style.css   the UI
+src/server/         models, services (same logic as the former NestJS modules), storage, db, jwt
+instrumentation.ts  runs the scheduler in-process when NOT on Vercel
+backend/, frontend/ the previous NestJS + Vite apps (no longer used; safe to delete)
+```
+
+## Setup
+```bash
+cp .env.example .env.local   # fill MONGODB_URI, JWT_SECRET, Google + LinkedIn keys
+npm install
+npm run dev                  # http://localhost:3000  (UI and API under /api)
+npm test                     # unit tests
+```
+Locally media goes to `UPLOAD_DIR` (served at `/uploads/<file>`) and the scheduler runs inside the dev/start server every 15 min.
+
+## Deploy to Vercel (no separate backend server)
+1. Import the repo in Vercel (framework: Next.js, root directory: repo root).
+2. Storage → create a **Blob** store and connect it to the project (adds `BLOB_READ_WRITE_TOKEN`). Serverless has no persistent disk, so uploads live in Blob and Instagram/Facebook download them from its public URLs directly (`PUBLIC_URL` is not needed).
+3. Set the env vars from `.env.example`: `APP_URL` (your production URL), `MONGODB_URI` (e.g. MongoDB Atlas), `JWT_SECRET`, OAuth keys, and `CRON_SECRET` (any long random string - Vercel Cron sends it as a bearer token).
+4. Register the redirect URIs with `{APP_URL}` as the base (see below). They are the same paths as before.
+5. `vercel.json` schedules `/api/cron/scheduler` every 15 minutes. **Vercel Hobby only allows daily crons** - use Pro for the 15-minute schedule (or point any external pinger at the endpoint with the `Authorization: Bearer $CRON_SECRET` header).
+
+Vercel limits to be aware of: a function request body is capped at ~4.5 MB, so uploads larger than that (big photos/videos) will be rejected on Vercel; the 100 MB `MAX_UPLOAD_MB` only applies to self-hosting. Publishing routes allow up to 300 s per request.
+
+### OAuth apps
+- **Google** (console.cloud.google.com → Credentials → OAuth client, Web): redirect URI `{APP_URL}/api/auth/google/callback` (locally `http://localhost:3000/...`)
+- **LinkedIn** (linkedin.com/developers → create app): add products *Sign In with LinkedIn using OpenID Connect* and *Share on LinkedIn*;
+  redirect URL `{APP_URL}/api/linkedin/callback`. Copy Client ID/Secret into `.env`.
+  LinkedIn member tokens last ~60 days; the dashboard shows the days left and users reconnect when it expires.
+
+For production set `APP_URL` to the public URL and register those redirect URIs (`BACKEND_URL` is still read as a fallback; `FRONTEND_URL` is no longer used).
+
+## Instagram
+Same planner, pick **Instagram** when creating a post (or filter the calendar by platform). Uses the *Instagram API with Instagram Login*.
+- Account must be an Instagram **Business or Creator** account (switch in Instagram → Settings → Account type).
+- Posts need media: JPEG photos (up to 10 carousel panels) or 1 MP4 (published as a Reel). Caption max 2200 chars. PNG/GIF are not supported by Instagram.
+- Photos outside Instagram's supported aspect ratio (4:5 to 1.91:1) are automatically split into ordered carousel panels without cropping the original.
+- **Instagram downloads your media from a public URL**. With Vercel Blob (production) this is automatic. With local-disk media (development), `localhost` and private/login-protected tunnels cannot work:
+  set `PUBLIC_URL` to an anonymous public HTTPS URL that reaches this app (e.g. an ngrok tunnel to port 3000), which serves `/uploads`, and use the same base for the OAuth redirect: `{PUBLIC_URL}/api/instagram/callback`.
+- Setup: developers.facebook.com → create app (type *Business*) → add product **Instagram** → *API setup with Instagram login* →
+  add the redirect URI above, copy the **Instagram app ID / secret** into `INSTAGRAM_APP_ID` / `INSTAGRAM_APP_SECRET`,
+  and add your Instagram account under *Roles → Instagram testers* (accept the invite in Instagram) while the app is in development mode.
+  Going live for other users requires Meta app review for `instagram_business_basic` and `instagram_business_content_publish`.
+- Tokens are long-lived (60 days) and refreshed automatically by the scheduler.
+- A LinkedIn and an Instagram post may share the same time slot; two posts on the *same* platform may not.
+
+## Facebook Pages
+Connect with Meta OAuth, grant access to one or more managed Pages, then choose the Page that should receive posts.
+Facebook personal profiles are not supported. The Facebook integration publishes text, JPEG/PNG photos (up to 10),
+photo collections, and MP4 video. Media is delivered through public URLs (Vercel Blob in production; `PUBLIC_URL` for local-disk media - the same requirement as Instagram).
+
+Create a Meta app at developers.facebook.com, configure Facebook Login, and register
+`{APP_URL}/api/facebook/callback` as the OAuth redirect URI. Set `FACEBOOK_APP_ID`,
+`FACEBOOK_APP_SECRET`, and (optionally) `FACEBOOK_API_VERSION` in the environment. The integration requests
+`pages_show_list`, `pages_read_engagement`, and `pages_manage_posts`; development-mode users must be app/test users,
+and publishing for other people requires the relevant Meta App Review and access approvals.
+
+## Posting to several networks at once
+One composer can target LinkedIn, Instagram, Facebook Pages, or any combination. The backend stores one post per network but ties
+them together with a `groupId`, so:
+- each network keeps its own status, retries and permalink (one can fail without blocking the others);
+- editing any copy updates the whole composed post (copies already published are left alone);
+- deleting or "Post now" affects the whole group;
+- the shared copy is validated against every target, so selecting Instagram enforces its 2200-character
+  caption limit, JPEG-only images and required media; Facebook requires a selected Page and supports up to 10 JPEG/PNG images or MP4.
+
+## Notes
+- LinkedIn access tokens are AES-256-GCM encrypted at rest (key derived from `JWT_SECRET` - don't rotate it without reconnecting users).
+- Media lives in Vercel Blob (or `UPLOAD_DIR` locally, served at `/uploads/<uuid>`).
+- Claiming due posts is atomic in Mongo, so overlapping scheduler runs / several instances are safe.

@@ -1,0 +1,3 @@
+1.emoji while description
+2.post description speling and sentence enhasment suggesaction
+3.language convert(english,hindi,marathi,gujarati, convert support)
