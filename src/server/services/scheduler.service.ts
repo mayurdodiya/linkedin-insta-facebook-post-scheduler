@@ -4,10 +4,9 @@ import type { InstagramService } from './instagram.service';
 import type { PostsService } from './posts.service';
 
 /**
- * Publishes due posts. Slots are on the hour in the *user's* timezone, which for zones
- * like IST (+5:30) is :30 past the hour in UTC, so it is triggered every 15 minutes - cheap
- * (indexed query) and never more than 15 minutes late for any timezone.
- * Triggered by Vercel Cron (/api/cron/scheduler) or, outside Vercel, by instrumentation.ts.
+ * Publishes due posts. Slots are on the hour in the *user's* timezone.
+ * On Vercel this is triggered once daily by the Hobby-compatible cron in vercel.json.
+ * Outside Vercel, instrumentation.ts checks every 15 minutes for local development.
  */
 export class SchedulerService {
   private readonly log = new Logger(SchedulerService.name);

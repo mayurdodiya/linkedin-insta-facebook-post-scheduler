@@ -13,10 +13,10 @@ Plan a whole month of social posts once; the server publishes them to LinkedIn, 
    Choose **One post per day** to upload up to 30 photos at once: each photo becomes its own post, one per consecutive day
    at the same time (10:00 by default), with an optional caption per photo. Days whose slot is already taken are skipped and
    reported in the composer.
-4. The scheduler (Vercel Cron → `/api/cron/scheduler`) runs every 15 minutes, claims due posts atomically, and publishes through each network's API.
+4. The scheduler (Vercel Cron → `/api/cron/scheduler`) runs once daily at 10:00 AM India time (04:30 UTC), claims due posts atomically, and publishes through each network's API.
    Transient errors retry up to 3 times; an expired connection or a missed window (> `MISSED_GRACE_HOURS`) marks the post **failed** with the reason shown in the UI.
 
-> The scheduler polls every 15 min (not hourly) because a slot like 9:00 in IST is 03:30 UTC - an hourly UTC tick would publish it 30 min late.
+> Vercel Hobby allows one cron invocation per day. The cron runs at 10:00 AM IST and catches every post already due at that time. Local development still checks every 15 minutes.
 
 ## Project layout
 ```
