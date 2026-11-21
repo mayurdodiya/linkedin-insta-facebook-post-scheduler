@@ -4,7 +4,7 @@ import { ConfigService } from '../config';
 import { BadRequestException, ConflictException, NotFoundException } from '../http';
 import { Logger } from '../logger';
 import type { Platform, Post, PostDocument, PostMedia } from '../models/post';
-import { isValidSlot, SLOT_FIRST_HOUR, SLOT_LAST_HOUR } from '../slots';
+import { isValidSlot, SLOT_FIRST_HOUR } from '../slots';
 import { removeFiles, uploadDirOf, type StoredRef } from '../storage';
 import type { FacebookService } from './facebook.service';
 import type { InstagramService } from './instagram.service';
@@ -37,10 +37,16 @@ export interface PostInput {
   removeMedia?: string | string[];
 }
 
-/** Multi-day scheduling: one photo -> one post, each with its own slot and optional caption. */
+/**
+ * Multi-day scheduling: one post per day, each with its own slot and optional caption.
+ * `scheduledAts` / `captions` have one entry per POST; `assignments` has one entry per uploaded
+ * file and names the post (0-based index) that file belongs to, so a day can hold several photos.
+ * Without `assignments` every file is its own post (one scheduledAt per file).
+ */
 export interface BulkPostInput extends PostInput {
   scheduledAts?: string | string[];
   captions?: string | string[];
+  assignments?: string | string[];
 }
 
 export class PostsService {
@@ -175,9 +181,8 @@ export class PostsService {
     const d = new Date(raw ?? '');
     if (!raw || Number.isNaN(d.getTime())) throw new BadRequestException('scheduledAt is not a valid date');
     if (!isValidSlot(d, timezone)) {
-      const last = SLOT_LAST_HOUR >= 24 ? 'midnight' : `${SLOT_LAST_HOUR}:00`;
       throw new BadRequestException(
-        `Time must be on the hour between ${SLOT_FIRST_HOUR}:00 and ${last} (${timezone})`,
+        `Scheduled posts are published once a day at ${SLOT_FIRST_HOUR}:00 AM (${timezone})`,
       );
     }
     return d;
@@ -262,23 +267,37 @@ export class PostsService {
       const fallback = (input.content ?? '').trim();
       const captions = [input.captions ?? []].flat();
       const slots = [input.scheduledAts ?? []].flat();
-      if (slots.length !== files.length) {
-        throw new BadRequestException('Send one scheduledAt for each photo');
+      const postCount = slots.length;
+      if (postCount === 0) throw new BadRequestException('Send a scheduledAt for each post');
+      if (postCount > BULK_MAX_POSTS) throw new BadRequestException(`At most ${BULK_MAX_POSTS} posts at once`);
+      const rawAssign = [input.assignments ?? []]
+        .flat()
+        .flatMap((x) => String(x).split(','))
+        .filter((x) => x.trim() !== '');
+      const assignments = rawAssign.length > 0 ? rawAssign.map(Number) : files.map((_, i) => i);
+      if (assignments.length !== files.length) {
+        throw new BadRequestException('Send one assignment for each photo');
       }
-      if (captions.length > 0 && captions.length !== files.length) {
-        throw new BadRequestException('Send one caption for each photo, or none at all');
+      if (assignments.some((a) => !Number.isInteger(a) || a < 0 || a >= postCount)) {
+        throw new BadRequestException('A photo is assigned to a post that does not exist');
+      }
+      for (let k = 0; k < postCount; k++) {
+        if (!assignments.includes(k)) throw new BadRequestException('Every post needs at least one photo');
+      }
+      if (captions.length > 0 && captions.length !== postCount) {
+        throw new BadRequestException('Send one caption for each post, or none at all');
       }
 
       const media = this.toMedia(files);
-      const items = files.map((_, i) => {
-        const scheduledAt = this.parseSlot(slots[i], timezone);
+      const items = slots.map((slot, k) => {
+        const scheduledAt = this.parseSlot(slot, timezone);
         if (scheduledAt.getTime() <= Date.now()) {
           throw new BadRequestException('Every post must be scheduled in the future');
         }
-        // an empty per-photo caption falls back to the shared default caption
-        const content = ((captions[i] ?? '').trim() || fallback).trim();
-        const itemMedia = [media[i]];
-        // each photo is its own post, so validate it against every selected network
+        // an empty per-post caption falls back to the shared default caption
+        const content = ((captions[k] ?? '').trim() || fallback).trim();
+        const itemMedia = media.filter((_, i) => assignments[i] === k);
+        // validate each post against every selected network
         for (const platform of platforms) this.validateContent(platform, content, itemMedia);
         return { content, scheduledAt, media: itemMedia };
       });

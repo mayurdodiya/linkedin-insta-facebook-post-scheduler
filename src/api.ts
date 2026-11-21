@@ -100,10 +100,17 @@ export interface BulkResult {
   skipped: string[];
 }
 
-/** One photo per post: up to a month of daily posts in one go. */
+/** Up to a month of daily posts in one go. */
 export const BULK_MAX_POSTS = 30;
+/** photos per multi-day upload (several can share one day) */
+export const BULK_MAX_PHOTOS = 60;
 
-export const SLOT_HOURS = Array.from({ length: 16 }, (_, i) => 9 + i); // 9:00 .. 24:00 (midnight)
+/**
+ * Scheduled posts go out once a day: the Vercel free plan only runs the cron one time (10:00 AM IST,
+ * see vercel.json). So there is a single slot; only "Post now" publishes at an arbitrary moment.
+ */
+export const SLOT_HOURS = [10];
+export const SLOT_LABEL = '10:00 AM IST';
 
 export const fmtHour = (h: number) =>
   new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });

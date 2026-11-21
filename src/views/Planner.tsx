@@ -1,7 +1,9 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { Info } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   api,
   fmtHour,
@@ -18,9 +20,6 @@ import {
   CalendarPlusIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  FacebookIcon,
-  InstagramIcon,
-  LinkedinIcon,
 } from '../components/Icons.tsx';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -45,16 +44,26 @@ export default function Planner() {
   const { user } = useAuth();
   const today = new Date();
   const [cursor, setCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
-  const [filter, setFilter] = useState<'all' | Platform>('all');
+  // every connected network is always shown: the composer already lets the user pick the networks
+  const filter: 'all' | Platform = 'all';
   const [picked, setPicked] = useState<{
     day: Date;
     post?: PostItem;
     groupPosts?: PostItem[];
     instant?: boolean;
     bulk?: boolean;
-  } | null>(() =>
-    new URLSearchParams(location.search).has('instant') ? { day: new Date(), instant: true } : null,
-  );
+  } | null>(null);
+
+  // /planner?instant=1 (the dashboard's "Post now") opens the instant-post popup straight away.
+  // useSearchParams is read here (not location.search) because on a client-side navigation the
+  // browser URL is only updated after this component first renders.
+  const router = useRouter();
+  const wantsInstant = useSearchParams().has('instant');
+  useEffect(() => {
+    if (!wantsInstant) return;
+    setPicked({ day: new Date(), instant: true });
+    router.replace('/planner'); // so a refresh doesn't reopen it
+  }, [wantsInstant, router]);
 
   const from = cursor;
   const to = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
@@ -118,12 +127,13 @@ export default function Planner() {
     setPicked({ day, post: primary, groupPosts });
   }
 
+  const [showHint, setShowHint] = useState(false);
   const monthLabel = cursor.toLocaleDateString([], { month: 'long', year: 'numeric' });
 
   return (
     <>
       <div className="page-head">
-        <div>
+        <div className="cal-title">
           <span className="eyebrow">Content calendar</span>
           <div className="month-nav">
             <button
@@ -144,12 +154,6 @@ export default function Planner() {
           </div>
         </div>
         <div className="actions">
-          <button
-            className="btn ghost"
-            onClick={() => setCursor(new Date(today.getFullYear(), today.getMonth(), 1))}
-          >
-            Today
-          </button>
           <button className="btn ghost" onClick={() => setPicked({ day: today, bulk: true })}>
             <CalendarPlusIcon />
             Plan a month
@@ -162,21 +166,6 @@ export default function Planner() {
       </div>
 
       <div className="cal-toolbar">
-        <div className="segmented" role="group" aria-label="Filter by network">
-          {(['all', 'linkedin', 'instagram', 'facebook'] as const).map((f) => (
-            <button
-              key={f}
-              className={`seg-btn${filter === f ? ' on' : ''}`}
-              aria-pressed={filter === f}
-              onClick={() => setFilter(f)}
-            >
-              {f === 'linkedin' && <LinkedinIcon width={14} height={14} />}
-              {f === 'instagram' && <InstagramIcon width={14} height={14} />}
-              {f === 'facebook' && <FacebookIcon width={14} height={14} />}
-              {f === 'all' ? 'All networks' : PLATFORM_LABEL[f]}
-            </button>
-          ))}
-        </div>
         <div className="cal-legend">
           <span className="legend-item">
             <span className="legend-dot scheduled" /> Scheduled
@@ -188,22 +177,27 @@ export default function Planner() {
             <span className="legend-dot failed" /> Failed
           </span>
         </div>
+        <button type="button" className="hint-toggle" aria-expanded={showHint} onClick={() => setShowHint((v) => !v)}>
+          <Info />
+          How planning works
+        </button>
       </div>
+      {showHint && (
+        <div className="cal-hint-box open">
+          <ul className="cal-hint-list">
+            <li>Click a day to add a post with text and photos for that date.</li>
+            <li>Scheduled posts are published once a day at 10:00 AM IST. Use Post now to publish immediately.</li>
+            <li>Plan a month: upload many photos, each gets its own day. Drag photos between days to post them together.</li>
+            <li>New posts go to every connected network by default - untick one in the composer to skip it.</li>
+          </ul>
+        </div>
+      )}
 
       {!user.linkedin && !user.instagram && !user.facebook?.selectedPageId && (
         <div className="alert error">
           No publishing account connected - connect LinkedIn, Instagram, or a Facebook Page on the dashboard first.
         </div>
       )}
-      <details className="cal-hint-box">
-        <summary>How planning works</summary>
-        <p className="muted small cal-hint">
-          Click a day to add a post. Slots run {fmtHour(9)} – {fmtHour(19)} ({user.timezone}). Choose &quot;One post per day&quot; in
-          the composer to upload a whole month of photos at once - each photo gets its own day at the same time. With more than one
-          network connected, new posts go to all of them by default - untick a network to post to just one.
-        </p>
-      </details>
-
       <div className="cal">
         {WEEKDAYS.map((d) => (
           <div className="cal-head" key={d}>

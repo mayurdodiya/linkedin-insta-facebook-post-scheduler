@@ -23,7 +23,7 @@ const themeScript = `(function () {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
     var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', theme === 'dark' ? '#0a0e17' : '#f6f7fb');
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#0a0a0a' : '#ffffff');
   } catch (e) {
     /* storage unavailable: the app still defaults to bright mode */
     document.documentElement.dataset.theme = 'light';
@@ -34,7 +34,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <meta name="theme-color" content="#f6f7fb" />
+        <meta name="theme-color" content="#ffffff" />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
@@ -43,7 +43,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           rel="stylesheet"
         />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>
     </html>

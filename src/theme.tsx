@@ -20,7 +20,7 @@ export function applyTheme(theme: Theme) {
   }
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute('content', theme === 'dark' ? '#0a0e17' : '#f6f7fb');
+    ?.setAttribute('content', theme === 'dark' ? '#0a0a0a' : '#ffffff');
 }
 
 export function useTheme() {

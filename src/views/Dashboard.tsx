@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
+import { useConfirm } from '../components/ConfirmDialog.tsx';
 import Link from 'next/link';
 import { api, errMsg, PLATFORM_LABEL, PLATFORM_SHORT, type PostItem, type PostStatus } from '../api.ts';
 import { useAuth } from '../auth.tsx';
@@ -25,6 +26,7 @@ const STAT_ICONS = {
 } as const;
 
 export default function Dashboard() {
+  const { ask, dialog: confirmDialog } = useConfirm();
   const { user } = useAuth();
   const qc = useQueryClient();
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
@@ -211,7 +213,15 @@ export default function Dashboard() {
             {li && (
               <button
                 className="btn ghost"
-                onClick={() => confirm('Disconnect LinkedIn? Scheduled posts will fail until you reconnect.') && disconnect.mutate()}
+                onClick={async () => {
+                  const ok = await ask({
+                    title: 'Disconnect LinkedIn?',
+                    message: 'Scheduled posts will fail until you reconnect.',
+                    confirmLabel: 'Disconnect',
+                    danger: true,
+                  });
+                  if (ok) disconnect.mutate();
+                }}
               >
                 Disconnect
               </button>
@@ -291,10 +301,15 @@ export default function Dashboard() {
             {fb && (
               <button
                 className="btn ghost"
-                onClick={() =>
-                  confirm('Disconnect Facebook? Scheduled Facebook posts will fail until you reconnect.') &&
-                  facebookDisconnect.mutate()
-                }
+                onClick={async () => {
+                  const ok = await ask({
+                    title: 'Disconnect Facebook?',
+                    message: 'Scheduled Facebook posts will fail until you reconnect.',
+                    confirmLabel: 'Disconnect',
+                    danger: true,
+                  });
+                  if (ok) facebookDisconnect.mutate();
+                }}
               >
                 Disconnect
               </button>
@@ -353,7 +368,15 @@ export default function Dashboard() {
             {ig && (
               <button
                 className="btn ghost"
-                onClick={() => confirm('Disconnect Instagram? Scheduled Instagram posts will fail until you reconnect.') && igDisconnect.mutate()}
+                onClick={async () => {
+                  const ok = await ask({
+                    title: 'Disconnect Instagram?',
+                    message: 'Scheduled Instagram posts will fail until you reconnect.',
+                    confirmLabel: 'Disconnect',
+                    danger: true,
+                  });
+                  if (ok) igDisconnect.mutate();
+                }}
               >
                 Disconnect
               </button>
@@ -432,6 +455,7 @@ export default function Dashboard() {
           })}
         </ul>
       </section>
+      {confirmDialog}
     </>
   );
 }

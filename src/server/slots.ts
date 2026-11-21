@@ -1,9 +1,10 @@
 /**
- * Posting window: 09:00 .. 24:00, on the hour, in the user's own timezone.
- * 24:00 is midnight at the end of the day (stored as 00:00 of the following day).
+ * Scheduled posts use ONE daily slot: 10:00 in the user's timezone (IST for this app). It matches the
+ * single daily cron in vercel.json (04:30 UTC = 10:00 IST) - the Vercel free plan runs cron once a day.
+ * Only "Post now" (instant) publishes at any other moment.
  */
-export const SLOT_FIRST_HOUR = 9;
-export const SLOT_LAST_HOUR = 24;
+export const SLOT_FIRST_HOUR = 10;
+export const SLOT_LAST_HOUR = 10;
 
 /** Wall-clock parts of an instant in the given IANA timezone. */
 export function localParts(date: Date, timeZone: string) {

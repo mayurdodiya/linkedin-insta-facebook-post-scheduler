@@ -8,9 +8,9 @@ export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 // multipart/form-data: content, platforms, scheduledAts[], captions[], media[] -
-// one post per file, each using its own scheduledAt/caption (multi-day planning)
+// one post per scheduledAt/caption; assignments[] maps each file to its post (multi-day planning)
 export const POST = route(async (req) => {
   const u = await requireUser(req);
-  const { body, files } = await parseMultipart(req, 30);
+  const { body, files } = await parseMultipart(req, 60);
   return services.posts.bulkCreate(u.id, body as BulkPostInput, files);
 });
