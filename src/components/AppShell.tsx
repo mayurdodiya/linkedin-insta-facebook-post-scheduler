@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
-import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, Table2 } from 'lucide-react';
 import { useAuth } from '../auth.tsx';
 import { BoltIcon, CalendarIcon, DashboardIcon, LogOutIcon } from './Icons.tsx';
 import { ThemeToggle } from '../theme.tsx';
@@ -97,6 +97,19 @@ export default function AppShell({ children }: { children: ReactNode }) {
               </Link>
             </TooltipTrigger>
             <TooltipContent side="right">Plan posts</TooltipContent>
+          </Tooltip>
+          <Tooltip open={collapsed ? undefined : false}>
+            <TooltipTrigger asChild>
+              <Link
+                href="/schedule"
+                aria-label="Schedule"
+                className={`nav-item${pathname.startsWith('/schedule') ? ' active' : ''}`}
+              >
+                <Table2 />
+                <span>Schedule</span>
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent side="right">Schedule</TooltipContent>
           </Tooltip>
         </nav>
 
