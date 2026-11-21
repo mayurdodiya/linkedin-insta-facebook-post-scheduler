@@ -1828,3 +1828,7 @@ body { max-width: 100%; overflow-x: clip; }
 .confirm-item.warn .ci-note { color: var(--err); }
 .confirm-item.off b { color: var(--muted); font-weight: 500; }
 .confirm-item.off .ci-icon { color: var(--faint); }
+
+/* Add photos (a <label>) and Add day (a <button>) must line up exactly */
+.bulk-actions { align-items: flex-start; }
+.bulk-actions .bulk-tile, .modal .bulk-actions label.bulk-tile { margin: 0; box-sizing: border-box; flex: none; }
