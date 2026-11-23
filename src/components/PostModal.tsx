@@ -7,7 +7,6 @@ import {
   api,
   BULK_MAX_POSTS,
   BULK_MAX_PHOTOS,
-  errMsg,
   fmtHour,
   PLATFORM_LABEL,
   PLATFORM_TEXT_LIMIT,
@@ -17,6 +16,7 @@ import {
   type Platform,
   type PostItem,
 } from '../api.ts';
+import { toast } from '../toast.tsx';
 import { StatusBadge } from './StatusBadge.tsx';
 import { CloseIcon } from './Icons.tsx';
 import { ClearButton, PasteButton } from './PasteButton.tsx';
@@ -101,7 +101,6 @@ export function PostModal({
   const [content, setContent] = useState(post?.content ?? '');
   const [removed, setRemoved] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
-  const [error, setError] = useState('');
 
   // Multi-day mode: one photo becomes one post on its own day, all at the same time of day.
   const canBulk = !post && !instant;
@@ -135,6 +134,8 @@ export function PostModal({
   useEffect(() => () => previews.forEach((p) => URL.revokeObjectURL(p.url)), [previews]);
 
   const keptMedia = (post?.media ?? []).filter((m) => !removed.includes(m.filename));
+  // media whose files are gone from server storage after publishing - nothing left to render
+  const visibleMedia = keptMedia.filter((m) => !m.cleaned);
   const hasVideo = keptMedia.some((m) => m.kind === 'video') || files.some((f) => f.type.startsWith('video/'));
   const maxImages = toInstagram ? (both ? MAX_IMAGES : 10) : toFacebook ? (both ? MAX_IMAGES : 10) : MAX_IMAGES;
 
@@ -161,7 +162,6 @@ export function PostModal({
       const free = (h: number) => !taken.has(h) && slotAt(h).getTime() > Date.now();
       if (!free(hour)) setHour(SLOT_HOURS.find(free) ?? '');
     }
-    setError('');
     setPlatforms(next);
   }
 
@@ -172,17 +172,17 @@ export function PostModal({
     const videos = [...keptMedia, ...next].filter((m) => ('kind' in m ? m.kind === 'video' : m.type.startsWith('video/'))).length;
     const total = keptMedia.length + next.length;
     if (toInstagram && next.some((f) => f.type.startsWith('image/') && f.type !== 'image/jpeg')) {
-      return setError('Instagram only accepts JPEG images and MP4 video.');
+      return toast.error('Instagram only accepts JPEG images and MP4 video.');
     }
     if (
       toFacebook &&
       next.some((f) => !['image/jpeg', 'image/png', 'video/mp4'].includes(f.type))
     ) {
-      return setError('Facebook accepts JPEG/PNG images and MP4 video.');
+      return toast.error('Facebook accepts JPEG/PNG images and MP4 video.');
     }
-    if (videos > 1 || (videos === 1 && total > 1)) return setError('A post can have one video or images, not both.');
-    if (total > maxImages) return setError(`Maximum ${maxImages} images.`);
-    setError('');
+    if (videos > 1 || (videos === 1 && total > 1))
+      return toast.error('A post can have one video or images, not both.');
+    if (total > maxImages) return toast.error(`Maximum ${maxImages} images.`);
     setFiles(next);
   }
 
@@ -223,17 +223,24 @@ export function PostModal({
       refresh();
       if (bulk && res && typeof res === 'object' && 'skipped' in res) {
         const result = res as BulkResult;
+        if (result.count > 0) {
+          toast.success(`Scheduled ${result.count} post${result.count === 1 ? '' : 's'}.`);
+        } else if (result.skipped.length > 0) {
+          toast.error('No posts were scheduled because every selected slot is already taken.');
+        }
         if (result.skipped.length > 0) {
           // keep the modal open so the user can see which days were already taken
           setBulkDone(result);
           return;
         }
+      } else {
+        toast.success(instant ? 'Post published.' : post ? 'Post updated.' : 'Post scheduled.');
       }
       onClose();
     },
-    onError: (e) => {
+    onError: () => {
       refresh();
-      setError(errMsg(e));
+      // the axios interceptor already turned the failure into a toast
     },
   });
   const del = useMutation({
@@ -242,7 +249,6 @@ export function PostModal({
       refresh();
       onClose();
     },
-    onError: (e) => setError(errMsg(e)),
   });
   const postNow = useMutation({
     mutationFn: () => api.post(`/posts/${post!.id}/publish-now`),
@@ -250,15 +256,31 @@ export function PostModal({
       refresh();
       onClose();
     },
-    onError: (e) => {
-      refresh();
-      setError(errMsg(e));
-    },
+    onError: () => refresh(),
   });
 
   const notConnected = platforms.filter(
     (p) => !user[p] || (p === 'facebook' && !user.facebook?.selectedPageId),
   );
+
+  // warn (as a toast) when a selected network has no account behind it
+  const notConnectedMsg =
+    notConnected.length === 0
+      ? ''
+      : notConnected.includes('facebook') && !user.facebook
+        ? 'Connect Facebook and choose a Page on the dashboard first.'
+        : notConnected.includes('facebook')
+          ? 'Choose a Facebook Page on the dashboard first.'
+          : `Connect ${notConnected.map((p) => PLATFORM_LABEL[p]).join(' and ')} on the dashboard first - publishing there will fail.`;
+  useEffect(() => {
+    if (notConnectedMsg) toast.error(notConnectedMsg);
+  }, [notConnectedMsg]);
+
+  // a previously failed post: surface why it failed when the editor opens
+  const lastError = post?.lastError;
+  useEffect(() => {
+    if (lastError) toast.error(lastError);
+  }, [lastError]);
 
   /** one bullet per network: will it get this post, and if not, why */
   const networkItems = (): ConfirmItem[] =>
@@ -284,18 +306,19 @@ export function PostModal({
     e.preventDefault();
     if (bulkDone) return; // this batch was already scheduled
     if (bulk) {
-      if (days.length === 0) return setError('Add at least one photo.');
+      if (days.length === 0) return toast.error('Add at least one photo.');
       const empty = days.findIndex((d) => d.images.length === 0);
-      if (empty >= 0) return setError(`Day ${empty + 1} has no photos - add a photo or remove the day.`);
+      if (empty >= 0) return toast.error(`Day ${empty + 1} has no photos - add a photo or remove the day.`);
       const bad = bulkCheck(days.flatMap((d) => d.images.map((i) => i.file)));
-      if (bad) return setError(bad);
-      if (days.some((d) => d.images.length > maxImages)) return setError(`A single post holds at most ${maxImages} images.`);
-      if (duplicateDates(bulkDates).size > 0) return setError('Two days have the same date - give each post its own date.');
-      if (days.some((_, k) => bulkSlot(k).getTime() <= Date.now())) return setError('Every post needs a future slot.');
+      if (bad) return toast.error(bad);
+      if (days.some((d) => d.images.length > maxImages))
+        return toast.error(`A single post holds at most ${maxImages} images.`);
+      if (duplicateDates(bulkDates).size > 0)
+        return toast.error('Two days have the same date - give each post its own date.');
+      if (days.some((_, k) => bulkSlot(k).getTime() <= Date.now())) return toast.error('Every post needs a future slot.');
       if (days.some((d) => d.caption.length > textLimit)) {
-        return setError(`Text is limited to ${textLimit} characters.`);
+        return toast.error(`Text is limited to ${textLimit} characters.`);
       }
-      setError('');
       const fmtDay = (d: Date) => d.toLocaleDateString([], { day: 'numeric', month: 'short' });
       const ok = await ask({
         title: `Schedule ${days.length} post${days.length === 1 ? '' : 's'}?`,
@@ -312,29 +335,18 @@ export function PostModal({
       if (ok) save.mutate();
       return;
     }
-    if (!instant && hour === '') return setError(`Today's ${SLOT_LABEL} has already passed - pick a later day or use Post now.`);
-    if (toInstagram && keptMedia.length + files.length === 0) return setError('Instagram posts need an image or a video.');
-    if (!instant && !slotFree(hour as number)) return setError('That slot is already used on one of the selected platforms.');
-    setError('');
-    if (!post) {
-      const ok = instant
-        ? await ask({
-            title: 'Publish now?',
-            items: [{ text: 'Goes live immediately', state: 'ok' }, ...networkItems()],
-            confirmLabel: 'Publish',
-          })
-        : await ask({
-            title: 'Schedule this post?',
-            items: [
-              {
-                text: day.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'short' }),
-                note: `at ${SLOT_LABEL}`,
-                state: 'ok',
-              },
-              ...networkItems(),
-            ],
-            confirmLabel: 'Schedule',
-          });
+    if (!instant && hour === '')
+      return toast.error(`Today's ${SLOT_LABEL} has already passed - pick a later day or use Post now.`);
+    if (toInstagram && keptMedia.length + files.length === 0)
+      return toast.error('Instagram posts need an image or a video.');
+    if (!instant && !slotFree(hour as number))
+      return toast.error('That slot is already used on one of the selected platforms.');
+    if (instant && !post) {
+      const ok = await ask({
+        title: 'Publish now?',
+        items: [{ text: 'Goes live immediately', state: 'ok' }, ...networkItems()],
+        confirmLabel: 'Publish',
+      });
       if (!ok) return;
     }
     save.mutate();
@@ -395,15 +407,6 @@ export function PostModal({
                 Very tall or wide photos are automatically split into carousel panels to fit Instagram.
               </p>
             )}
-            {notConnected.length > 0 && (
-              <div className="alert error">
-                {notConnected.includes('facebook') && !user.facebook
-                  ? 'Connect Facebook and choose a Page on the dashboard first.'
-                  : notConnected.includes('facebook')
-                    ? 'Choose a Facebook Page on the dashboard first.'
-                    : `Connect ${notConnected.map((p) => PLATFORM_LABEL[p]).join(' and ')} on the dashboard first - publishing there will fail.`}
-              </div>
-            )}
           </div>
         )}
 
@@ -423,7 +426,6 @@ export function PostModal({
           </p>
         )}
 
-        {post?.lastError && <div className="alert error">{post.lastError}</div>}
         {post?.status === 'published' && (
           <div className="alert ok">
             Published {post.publishedAt && new Date(post.publishedAt).toLocaleString()}
@@ -462,7 +464,7 @@ export function PostModal({
           <span className="day-count muted small">
             {!locked && (
               <PasteButton
-                onError={setError}
+                onError={toast.error}
                 onText={(t) => setContent((c) => (c ? `${c}
 ${t}` : t).slice(0, textLimit))}
               />
@@ -490,14 +492,19 @@ ${t}` : t).slice(0, textLimit))}
               textLimit={textLimit}
               disabled={!!bulkDone}
               check={bulkCheck}
-              onError={setError}
+              onError={toast.error}
             />
           </div>
         ) : (
         <div>
           <div className="label">Media</div>
+          {keptMedia.length > 0 && visibleMedia.length === 0 && (
+            <p className="muted small" style={{ margin: '0 0 0.45rem' }}>
+              Media was removed from the server after publishing.
+            </p>
+          )}
           <div className="thumbs">
-            {keptMedia.map((m, mi) => (
+            {visibleMedia.map((m, mi) => (
               <div className="thumb" key={m.filename}>
                 {m.kind === 'video' ? (
                   <video src={m.url} muted onClick={() => setPreviewIdx(mi)} />
@@ -514,9 +521,9 @@ ${t}` : t).slice(0, textLimit))}
             {previews.map(({ f, url }, i) => (
               <div className="thumb" key={url}>
                 {f.type.startsWith('video/') ? (
-                  <video src={url} muted onClick={() => setPreviewIdx(keptMedia.length + i)} />
+                  <video src={url} muted onClick={() => setPreviewIdx(visibleMedia.length + i)} />
                 ) : (
-                  <img src={url} alt="" onClick={() => setPreviewIdx(keptMedia.length + i)} />
+                  <img src={url} alt="" onClick={() => setPreviewIdx(visibleMedia.length + i)} />
                 )}
                 {!bulkDone && (
                   <button type="button" className="x" onClick={() => removeFile(i)}>
@@ -572,7 +579,6 @@ ${t}` : t).slice(0, textLimit))}
           </div>
         )}
 
-        {error && <div className="alert error">{error}</div>}
         </div>
 
         <div className="row modal-foot">
@@ -636,7 +642,7 @@ ${t}` : t).slice(0, textLimit))}
         {previewIdx !== null && (
           <MediaPreview
             items={[
-              ...keptMedia.map((m) => ({ url: m.url, kind: m.kind })),
+              ...visibleMedia.map((m) => ({ url: m.url, kind: m.kind })),
               ...previews.map(({ f, url }) => ({ url, kind: f.type.startsWith('video/') ? ('video' as const) : ('image' as const) })),
             ]}
             index={previewIdx}

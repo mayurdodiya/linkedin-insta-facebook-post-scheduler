@@ -41,6 +41,10 @@ export class SchedulerService {
         if (done >= 200) break;
       }
       if (done) this.log.log(`Processed ${done} due post(s)`);
+
+      // drop media of posts whose publish outlived its cleanup (crash / older posts)
+      const cleaned = await this.posts.cleanupPublishedMedia();
+      if (cleaned) this.log.log(`Cleaned up media of ${cleaned} published post(s)`);
       return done;
     } catch (e) {
       this.log.error(`Scheduler run failed: ${(e as Error).message}`);

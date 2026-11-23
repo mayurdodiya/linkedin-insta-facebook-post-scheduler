@@ -2,7 +2,7 @@
 
 Plan a whole month of social posts once; the server publishes them to LinkedIn, Instagram, and Facebook Pages for you.
 
-**Stack:** Next.js (App Router, one project: UI + `/api` route handlers) · MongoDB (Mongoose) · Vercel Blob media storage (local disk in dev) · Vercel Cron scheduler
+**Stack:** Next.js (App Router, one project: UI + `/api` route handlers) · MongoDB (Mongoose + GridFS media fallback) · Vercel Blob media storage (optional) · Vercel Cron scheduler
 
 ## Flow
 1. Sign up / log in with email + password or Google OAuth.
@@ -15,6 +15,7 @@ Plan a whole month of social posts once; the server publishes them to LinkedIn, 
    reported in the composer.
 4. The scheduler (Vercel Cron → `/api/cron/scheduler`) runs once daily at 10:00 AM India time (04:30 UTC), claims due posts atomically, and publishes through each network's API.
    Transient errors retry up to 3 times; an expired connection or a missed window (> `MISSED_GRACE_HOURS`) marks the post **failed** with the reason shown in the UI.
+   Uploaded media stays in storage until publishing succeeds for every network copy; failed posts keep their media so they can be retried, and the files are then deleted from the server.
 
 > Vercel Hobby allows one cron invocation per day. The cron runs at 10:00 AM IST and catches every post already due at that time. Local development still checks every 15 minutes.
 
@@ -38,7 +39,7 @@ Locally media goes to `UPLOAD_DIR` (served at `/uploads/<file>`) and the schedul
 
 ## Deploy to Vercel (no separate backend server)
 1. Import the repo in Vercel (framework: Next.js, root directory: repo root).
-2. Storage → create a **Blob** store and connect it to the project (adds `BLOB_READ_WRITE_TOKEN`). Serverless has no persistent disk, so uploads live in Blob and Instagram/Facebook download them from its public URLs directly (`PUBLIC_URL` is not needed).
+2. Media uploads use MongoDB GridFS by default on Vercel, so no separate storage provider is required. Optionally connect a **Blob** store to use Vercel Blob instead (`BLOB_READ_WRITE_TOKEN`). Media URLs are public so Instagram/Facebook can download them.
 3. Set the env vars from `.env.example`: `APP_URL` (your production URL), `MONGODB_URI` (e.g. MongoDB Atlas), `JWT_SECRET`, OAuth keys, and `CRON_SECRET` (any long random string - Vercel Cron sends it as a bearer token).
 4. Register the redirect URIs with `{APP_URL}` as the base (see below). They are the same paths as before.
 5. `vercel.json` schedules `/api/cron/scheduler` every 15 minutes. **Vercel Hobby only allows daily crons** - use Pro for the 15-minute schedule (or point any external pinger at the endpoint with the `Authorization: Bearer $CRON_SECRET` header).

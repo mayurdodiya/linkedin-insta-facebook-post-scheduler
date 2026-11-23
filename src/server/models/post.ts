@@ -12,6 +12,8 @@ export interface PostMedia {
   mimetype: string;
   size: number;
   kind: 'image' | 'video';
+  /** set once the file has been dropped from storage after the post went out to the network */
+  cleaned?: boolean;
 }
 
 export interface Post {
@@ -47,6 +49,7 @@ const PostMediaSchema = new Schema<PostMedia>(
     mimetype: { type: String, required: true },
     size: { type: Number, required: true },
     kind: { type: String, required: true, enum: ['image', 'video'] },
+    cleaned: { type: Boolean },
   },
   { _id: false },
 );

@@ -1,10 +1,9 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   api,
-  errMsg,
   fmtHour,
   PLATFORM_LABEL,
   PLATFORM_SHORT,
@@ -15,6 +14,7 @@ import {
   type PostStatus,
 } from '../api.ts';
 import { useAuth } from '../auth.tsx';
+import { toast } from '../toast.tsx';
 import { PostModal } from '../components/PostModal.tsx';
 import { StatusBadge } from '../components/StatusBadge.tsx';
 import { CloseIcon } from '../components/Icons.tsx';
@@ -67,7 +67,12 @@ export default function Schedule() {
 
   const rangeInvalid = !!from && !!to && from > to;
 
-  const { data: fetched = [], isLoading, isError, error } = useQuery({
+  // fire once when the picked range becomes invalid (the axios interceptor covers API failures)
+  useEffect(() => {
+    if (rangeInvalid) toast.error('"From" must be on or before "To".');
+  }, [rangeInvalid]);
+
+  const { data: fetched = [], isLoading, isError } = useQuery({
     // starts with 'posts' so the composer's invalidateQueries(['posts']) refreshes this table too
     queryKey: ['posts', 'table', from, to],
     enabled: !rangeInvalid,
@@ -187,9 +192,7 @@ export default function Schedule() {
             Reset
           </button>
         </div>
-        {rangeInvalid && <div className="alert error">&quot;From&quot; must be on or before &quot;To&quot;.</div>}
       </div>
-
       <div className="card sch-table-card">
         <div className="sch-summary muted small">
           {isLoading
@@ -197,8 +200,6 @@ export default function Schedule() {
             : `${rows.length} post${rows.length === 1 ? '' : 's'}`}
           {fetched.length >= FETCH_LIMIT && ` · showing the first ${FETCH_LIMIT} in this range - narrow the dates to see the rest`}
         </div>
-
-        {isError && <div className="alert error">{errMsg(error)}</div>}
 
         {!isLoading && !isError && rows.length === 0 && !rangeInvalid && (
           <div className="sch-empty">No posts match these filters.</div>
@@ -316,7 +317,6 @@ function RescheduleDialog({
   onDone: () => void;
 }) {
   const [date, setDate] = useState(ymd(row.at));
-  const [error, setError] = useState('');
 
   const editable = row.posts.filter((p) => p.status === 'scheduled' || p.status === 'failed');
   const primary = editable[0];
@@ -334,14 +334,15 @@ function RescheduleDialog({
       return api.patch(`/posts/${primary.id}`, fd);
     },
     onSuccess: onDone,
-    onError: (e) => setError(errMsg(e)),
+    // API failures are toasted by the axios interceptor
   });
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (!date) return setError('Pick a date.');
+    if (!date) return toast.error('Pick a date.');
     const slot = slotOf(date);
-    if (slot.getTime() <= Date.now()) return setError(`That ${SLOT_LABEL} slot has already passed - pick a later day.`);
+    if (slot.getTime() <= Date.now())
+      return toast.error(`That ${SLOT_LABEL} slot has already passed - pick a later day.`);
     if (slot.getTime() === new Date(primary.scheduledAt).getTime()) return onClose(); // unchanged
     const taken = others.some(
       (p) =>
@@ -349,8 +350,7 @@ function RescheduleDialog({
         editable.some((m) => m.platform === p.platform) &&
         new Date(p.scheduledAt).getTime() === slot.getTime(),
     );
-    if (taken) return setError('You already have a post in that time slot on one of these networks.');
-    setError('');
+    if (taken) return toast.error('You already have a post in that time slot on one of these networks.');
     save.mutate();
   };
 
@@ -375,7 +375,6 @@ function RescheduleDialog({
             </label>
             <p className="muted small">It will be published at {SLOT_LABEL} on the new date.</p>
           </div>
-          {error && <div className="alert error">{error}</div>}
         </div>
         <div className="row modal-foot">
           <div className="grow" />

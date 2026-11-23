@@ -161,3 +161,18 @@ export const MoonIcon = (p: IconProps) => (
     <path d="M20.5 14.2A8.6 8.6 0 0 1 9.8 3.5a8.8 8.8 0 1 0 10.7 10.7z" />
   </svg>
 );
+
+export const EyeIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M2.2 12S5.9 5.5 12 5.5 21.8 12 21.8 12 18.1 18.5 12 18.5 2.2 12 2.2 12z" />
+    <circle cx="12" cy="12" r="3.1" />
+  </svg>
+);
+
+export const EyeOffIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M10.6 6.1A9.6 9.6 0 0 1 12 6c6.1 0 9.8 6 9.8 6a17.6 17.6 0 0 1-3.6 4.4M6.4 7.6A17.3 17.3 0 0 0 2.2 12s3.7 6 9.8 6a9.4 9.4 0 0 0 4.1-.9" />
+    <path d="M9.9 9.9a3.1 3.1 0 0 0 4.3 4.3" />
+    <path d="M3.4 3.4l17.2 17.2" />
+  </svg>
+);

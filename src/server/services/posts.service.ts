@@ -115,6 +115,7 @@ export class PostsService {
         kind: m.kind,
         size: m.size,
         url: m.url ?? `/uploads/${m.filename}`,
+        cleaned: m.cleaned === true,
       })),
     };
   }
@@ -125,14 +126,27 @@ export class PostsService {
 
   /**
    * Media files can be referenced by several posts (one per network in a group, or a published
-   * copy of an edited post), so only remove a file once no post points at it anymore.
+   * copy of an edited post), so a file is only removed once no post still has to upload it:
+   * published copies have already sent their media to the network. Those copies get a `cleaned`
+   * flag so the UI stops pointing at a file that is gone from storage.
    */
-  private async deleteFilesIfUnreferenced(files: StoredRef[]) {
+  private async deleteFilesIfUnused(files: StoredRef[]) {
     if (files.length === 0) return;
     const filenames = files.map((f) => f.filename);
-    const posts = await this.model.find({ 'media.filename': { $in: filenames } }).select('media.filename');
-    const referenced = new Set(posts.flatMap((p) => p.media.map((m) => m.filename)));
-    await this.deleteFiles(files.filter((f) => !referenced.has(f.filename)));
+    const pending = await this.model
+      .find({ 'media.filename': { $in: filenames }, status: { $in: ['scheduled', 'publishing', 'failed'] } })
+      .select('media.filename');
+    const needed = new Set(pending.flatMap((p) => p.media.map((m) => m.filename)));
+    const unused = files.filter((f) => !needed.has(f.filename));
+    if (unused.length === 0) return;
+    const unusedNames = unused.map((f) => f.filename);
+    // flag first: a half-deleted file must never be shown as a broken thumbnail
+    await this.model.updateMany(
+      { 'media.filename': { $in: unusedNames }, status: 'published' },
+      { $set: { 'media.$[e].cleaned': true } },
+      { arrayFilters: [{ 'e.filename': { $in: unusedNames } }] },
+    );
+    await this.deleteFiles(unused);
   }
 
   private toMedia(files: UploadedFile[]): PostMedia[] {
@@ -461,7 +475,7 @@ export class PostsService {
           $unset: { lastError: 1, lockedAt: 1, retryAfter: 1 },
         },
       );
-      await this.deleteFilesIfUnreferenced(removedFiles);
+      await this.deleteFilesIfUnused(removedFiles);
 
       const updated = await this.model.findById(post._id);
       if (!updated) throw new NotFoundException('Post not found');
@@ -479,7 +493,7 @@ export class PostsService {
     const deletable = group.filter((p) => p.status !== 'publishing');
     if (deletable.length === 0) throw new ConflictException('Post is being published right now');
     await this.model.deleteMany({ _id: { $in: deletable.map((p) => p._id) } });
-    await this.deleteFilesIfUnreferenced([
+    await this.deleteFilesIfUnused([
       ...new Map(deletable.flatMap((p) => p.media).map((m) => [m.filename, m] as const)).values(),
     ]);
     return { ok: true };
@@ -620,6 +634,30 @@ export class PostsService {
       this.log.warn(`Post ${post.id} attempt ${post.attempts} failed: ${err.message}`);
     }
     post.lockedAt = undefined;
-    return post.save();
+    const saved = await post.save();
+    if (saved.status === 'published') {
+      // the network has its copy of the media now, so drop the files from storage;
+      // best effort - publishing already succeeded, the sweep retries whatever is left
+      await this.deleteFilesIfUnused(saved.media).catch((e: Error) =>
+        this.log.warn(`Could not clean media of post ${saved.id}: ${e.message}`),
+      );
+    }
+    return saved;
+  }
+
+  /**
+   * Backstop for media that outlived its publish (a crash between save and cleanup) and for posts
+   * published before cleanup existed: drop the files no pending post needs and flag them.
+   */
+  async cleanupPublishedMedia(limit = 200) {
+    const posts = await this.model
+      .find({ status: 'published', media: { $elemMatch: { cleaned: { $ne: true } } } })
+      .limit(limit);
+    for (const post of posts) {
+      await this.deleteFilesIfUnused(post.media).catch((e: Error) =>
+        this.log.warn(`Could not clean media of post ${post.id}: ${e.message}`),
+      );
+    }
+    return posts.length;
   }
 }

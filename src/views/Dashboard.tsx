@@ -4,8 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useConfirm } from '../components/ConfirmDialog.tsx';
 import Link from 'next/link';
-import { api, errMsg, PLATFORM_LABEL, PLATFORM_SHORT, type PostItem, type PostStatus } from '../api.ts';
+import { api, PLATFORM_LABEL, PLATFORM_SHORT, type PostItem, type PostStatus } from '../api.ts';
 import { useAuth } from '../auth.tsx';
+import { toast } from '../toast.tsx';
 import { StatusBadge } from '../components/StatusBadge.tsx';
 import {
   AlertIcon,
@@ -29,7 +30,6 @@ export default function Dashboard() {
   const { ask, dialog: confirmDialog } = useConfirm();
   const { user } = useAuth();
   const qc = useQueryClient();
-  const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [facebookPageId, setFacebookPageId] = useState(user.facebook?.selectedPageId ?? '');
   const fb = user.facebook;
 
@@ -41,22 +41,22 @@ export default function Dashboard() {
   useEffect(() => {
     const q = new URLSearchParams(location.search);
     if (q.get('linkedin') === 'connected') {
-      setNotice({ kind: 'ok', text: 'LinkedIn connected successfully.' });
+      toast.success('LinkedIn connected successfully.');
       void qc.invalidateQueries({ queryKey: ['me'] });
     } else if (q.get('linkedin_error')) {
-      setNotice({ kind: 'error', text: `LinkedIn connection failed: ${q.get('linkedin_error')}` });
+      toast.error(`LinkedIn connection failed: ${q.get('linkedin_error')}`);
     }
     if (q.get('instagram') === 'connected') {
-      setNotice({ kind: 'ok', text: 'Instagram connected successfully.' });
+      toast.success('Instagram connected successfully.');
       void qc.invalidateQueries({ queryKey: ['me'] });
     } else if (q.get('instagram_error')) {
-      setNotice({ kind: 'error', text: `Instagram connection failed: ${q.get('instagram_error')}` });
+      toast.error(`Instagram connection failed: ${q.get('instagram_error')}`);
     }
     if (q.get('facebook') === 'connected') {
-      setNotice({ kind: 'ok', text: 'Facebook connected. Choose which Page to publish to below.' });
+      toast.success('Facebook connected. Choose which Page to publish to below.');
       void qc.invalidateQueries({ queryKey: ['me'] });
     } else if (q.get('facebook_error')) {
-      setNotice({ kind: 'error', text: `Facebook connection failed: ${q.get('facebook_error')}` });
+      toast.error(`Facebook connection failed: ${q.get('facebook_error')}`);
     }
     if (q.size) history.replaceState(null, '', location.pathname);
   }, [qc]);
@@ -64,7 +64,6 @@ export default function Dashboard() {
   const igConnect = useMutation({
     mutationFn: async () => (await api.get<{ url: string }>('/instagram/connect-url')).data.url,
     onSuccess: (url) => location.assign(url),
-    onError: (e) => setNotice({ kind: 'error', text: errMsg(e) }),
   });
   const igDisconnect = useMutation({
     mutationFn: () => api.delete('/instagram'),
@@ -74,7 +73,6 @@ export default function Dashboard() {
   const connect = useMutation({
     mutationFn: async () => (await api.get<{ url: string }>('/linkedin/connect-url')).data.url,
     onSuccess: (url) => location.assign(url),
-    onError: (e) => setNotice({ kind: 'error', text: errMsg(e) }),
   });
   const disconnect = useMutation({
     mutationFn: () => api.delete('/linkedin'),
@@ -83,7 +81,6 @@ export default function Dashboard() {
   const facebookConnect = useMutation({
     mutationFn: async () => (await api.get<{ url: string }>('/facebook/connect-url')).data.url,
     onSuccess: (url) => location.assign(url),
-    onError: (e) => setNotice({ kind: 'error', text: errMsg(e) }),
   });
   const facebookDisconnect = useMutation({
     mutationFn: () => api.delete('/facebook'),
@@ -91,15 +88,13 @@ export default function Dashboard() {
       setFacebookPageId('');
       void qc.invalidateQueries({ queryKey: ['me'] });
     },
-    onError: (e) => setNotice({ kind: 'error', text: errMsg(e) }),
   });
   const facebookSelectPage = useMutation({
     mutationFn: () => api.post('/facebook/select-page', { pageId: facebookPageId }),
     onSuccess: () => {
-      setNotice({ kind: 'ok', text: 'Facebook Page selected.' });
+      toast.success('Facebook Page selected.');
       void qc.invalidateQueries({ queryKey: ['me'] });
     },
-    onError: (e) => setNotice({ kind: 'error', text: errMsg(e) }),
   });
 
   const stats = useQuery({
@@ -162,8 +157,6 @@ export default function Dashboard() {
           </Link>
         </div>
       </div>
-
-      {notice && <div className={`alert ${notice.kind}`}>{notice.text}</div>}
 
       <section className="channels">
         <div className="card channel">

@@ -1,8 +1,16 @@
 import axios, { AxiosError } from 'axios';
+import { toast } from './toast.tsx';
 
 export const TOKEN_KEY = 'lps_token';
 
 export const api = axios.create({ baseURL: '/api' });
+
+declare module 'axios' {
+  export interface AxiosRequestConfig {
+    /** suppress the global error toast (for requests the UI handles itself) */
+    silent?: boolean;
+  }
+}
 
 api.interceptors.request.use((cfg) => {
   const t = localStorage.getItem(TOKEN_KEY);
@@ -17,7 +25,10 @@ api.interceptors.response.use(
     if (err.response?.status === 401 && !url.startsWith('/auth/login')) {
       localStorage.removeItem(TOKEN_KEY);
       if (!location.pathname.startsWith('/login')) location.assign('/login');
+      return Promise.reject(err);
     }
+    // every failed request becomes a toast, unless the caller opted out
+    if (!err.config?.silent && !axios.isCancel(err)) toast.error(errMsg(err));
     return Promise.reject(err);
   },
 );
@@ -74,6 +85,8 @@ export interface MediaItem {
   kind: 'image' | 'video';
   size: number;
   url: string;
+  /** true once the file has been deleted from server storage after the post was published */
+  cleaned?: boolean;
 }
 export type PostStatus = 'scheduled' | 'publishing' | 'published' | 'failed';
 export interface PostItem {

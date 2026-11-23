@@ -39,7 +39,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (user && user.timezone !== browserTz()) {
       api
-        .patch<User>('/auth/me', { timezone: browserTz() })
+        .patch<User>('/auth/me', { timezone: browserTz() }, { silent: true })
         .then((r) => qc.setQueryData(['me'], r.data))
         .catch(() => undefined);
     }

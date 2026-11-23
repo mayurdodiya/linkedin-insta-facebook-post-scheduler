@@ -2,17 +2,18 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, errMsg, TOKEN_KEY, type User } from '../api.ts';
+import { api, TOKEN_KEY, type User } from '../api.ts';
 import { browserTz } from '../auth.tsx';
-import { BoltIcon, CalendarIcon, CheckIcon, InstagramIcon, LinkedinIcon, SendIcon } from '../components/Icons.tsx';
+import { BoltIcon, CalendarIcon, CheckIcon, EyeIcon, EyeOffIcon, InstagramIcon, LinkedinIcon, SendIcon } from '../components/Icons.tsx';
+import { toast } from '../toast.tsx';
 import { ThemeToggle } from '../theme.tsx';
 
 export default function Login() {
   const router = useRouter();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [form, setForm] = useState({ name: '', email: '', password: '' });
-  const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showPw, setShowPw] = useState(false);
 
   useEffect(() => {
     // already signed in -> straight to the app; otherwise show an OAuth error passed in the URL
@@ -20,7 +21,8 @@ export default function Login() {
       router.replace('/dashboard');
       return;
     }
-    setError(new URLSearchParams(location.search).get('error') ?? '');
+    const oauthError = new URLSearchParams(location.search).get('error');
+    if (oauthError) toast.error(oauthError);
   }, [router]);
 
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
@@ -29,7 +31,6 @@ export default function Login() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
-    setError('');
     try {
       const body =
         mode === 'signup'
@@ -41,8 +42,8 @@ export default function Login() {
       );
       localStorage.setItem(TOKEN_KEY, data.token);
       router.replace('/dashboard');
-    } catch (err) {
-      setError(errMsg(err));
+    } catch {
+      // the axios interceptor already turned the failure into a toast
     } finally {
       setBusy(false);
     }
@@ -158,19 +159,29 @@ export default function Login() {
           </label>
           <label>
             Password
-            <input
-              required
-              type="password"
-              minLength={mode === 'signup' ? 8 : 1}
-              value={form.password}
-              onChange={set('password')}
-              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-              placeholder="••••••••"
-            />
+            <span className="pw-wrap">
+              <input
+                required
+                type={showPw ? 'text' : 'password'}
+                minLength={mode === 'signup' ? 8 : 1}
+                value={form.password}
+                onChange={set('password')}
+                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                className="pw-toggle"
+                onClick={() => setShowPw((v) => !v)}
+                aria-label={showPw ? 'Hide password' : 'Show password'}
+                aria-pressed={showPw}
+              >
+                {showPw ? <EyeOffIcon width={17} height={17} /> : <EyeIcon width={17} height={17} />}
+              </button>
+            </span>
             {mode === 'signup' && <span className="muted small">At least 8 characters</span>}
           </label>
 
-          {error && <div className="alert error">{error}</div>}
           <button className="btn primary" disabled={busy}>
             {busy ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Sign up'}
           </button>
@@ -181,7 +192,6 @@ export default function Login() {
               className="link"
               onClick={() => {
                 setMode(mode === 'login' ? 'signup' : 'login');
-                setError('');
               }}
             >
               {mode === 'login' ? 'Create an account' : 'Log in'}

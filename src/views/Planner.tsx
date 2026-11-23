@@ -14,6 +14,7 @@ import {
   type PostStatus,
 } from '../api.ts';
 import { useAuth } from '../auth.tsx';
+import { toast } from '../toast.tsx';
 import { PostModal } from '../components/PostModal.tsx';
 import {
   BoltIcon,
@@ -130,6 +131,15 @@ export default function Planner() {
   const [showHint, setShowHint] = useState(false);
   const monthLabel = cursor.toLocaleDateString([], { month: 'long', year: 'numeric' });
 
+  const nothingConnected = !user.linkedin && !user.instagram && !user.facebook?.selectedPageId;
+  useEffect(() => {
+    if (nothingConnected) {
+      toast.error(
+        'No publishing account connected - connect LinkedIn, Instagram, or a Facebook Page on the dashboard first.',
+      );
+    }
+  }, [nothingConnected]);
+
   return (
     <>
       <div className="page-head">
@@ -193,11 +203,6 @@ export default function Planner() {
         </div>
       )}
 
-      {!user.linkedin && !user.instagram && !user.facebook?.selectedPageId && (
-        <div className="alert error">
-          No publishing account connected - connect LinkedIn, Instagram, or a Facebook Page on the dashboard first.
-        </div>
-      )}
       <div className="cal">
         {WEEKDAYS.map((d) => (
           <div className="cal-head" key={d}>
