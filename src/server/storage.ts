@@ -32,8 +32,7 @@ const s3Configured = () =>
     process.env.AWS_S3_BUCKET ||
     process.env.AWS_REGION ||
     process.env.AWS_ACCESS_KEY_ID ||
-    process.env.AWS_SECRET_ACCESS_KEY ||
-    process.env.AWS_SESSION_TOKEN
+    process.env.AWS_SECRET_ACCESS_KEY
   );
 
 function s3Settings() {
@@ -52,7 +51,6 @@ function s3Settings() {
     region,
     accessKeyId,
     secretAccessKey,
-    sessionToken: process.env.AWS_SESSION_TOKEN?.trim(),
   };
 }
 
@@ -63,14 +61,13 @@ let s3Client: S3Client | undefined;
 let s3ClientKey = '';
 
 function getS3Client(settings: NonNullable<ReturnType<typeof s3Settings>>) {
-  const key = `${settings.region}:${settings.accessKeyId}:${settings.secretAccessKey}:${settings.sessionToken ?? ''}`;
+  const key = `${settings.region}:${settings.accessKeyId}:${settings.secretAccessKey}`;
   if (!s3Client || key !== s3ClientKey) {
     s3Client = new S3Client({
       region: settings.region,
       credentials: {
         accessKeyId: settings.accessKeyId,
         secretAccessKey: settings.secretAccessKey,
-        ...(settings.sessionToken ? { sessionToken: settings.sessionToken } : {}),
       },
     });
     s3ClientKey = key;
