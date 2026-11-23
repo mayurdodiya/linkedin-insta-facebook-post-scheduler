@@ -2,7 +2,7 @@
 
 Plan a whole month of social posts once; the server publishes them to LinkedIn, Instagram, and Facebook Pages for you.
 
-**Stack:** Next.js (App Router, one project: UI + `/api` route handlers) · MongoDB (Mongoose + GridFS media fallback) · Vercel Blob media storage (optional) · Vercel Cron scheduler
+**Stack:** Next.js (App Router, one project: UI + `/api` route handlers) · MongoDB (Mongoose + GridFS media fallback) · AWS S3 or Vercel Blob media storage (optional) · Vercel Cron scheduler
 
 ## Flow
 1. Sign up / log in with email + password or Google OAuth.
@@ -39,7 +39,7 @@ Locally media goes to `UPLOAD_DIR` (served at `/uploads/<file>`) and the schedul
 
 ## Deploy to Vercel (no separate backend server)
 1. Import the repo in Vercel (framework: Next.js, root directory: repo root).
-2. Media uploads use MongoDB GridFS by default on Vercel, so no separate storage provider is required. Optionally connect a **Blob** store to use Vercel Blob instead (`BLOB_READ_WRITE_TOKEN`). Media URLs are public so Instagram/Facebook can download them.
+2. Media uploads use MongoDB GridFS by default on Vercel. To use AWS S3, set `AWS_S3_BUCKET`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`; S3 takes precedence over Blob and GridFS. Grant the IAM user `s3:PutObject`, `s3:GetObject`, and `s3:DeleteObject` for `arn:aws:s3:::YOUR_BUCKET/uploads/*`. Keep the bucket private: the app streams S3 media through public `/uploads` URLs for social networks. Alternatively, configure Vercel Blob with `BLOB_READ_WRITE_TOKEN`.
 3. Set the env vars from `.env.example`: `APP_URL` (your production URL), `MONGODB_URI` (e.g. MongoDB Atlas), `JWT_SECRET`, OAuth keys, and `CRON_SECRET` (any long random string - Vercel Cron sends it as a bearer token).
 4. Register the redirect URIs with `{APP_URL}` as the base (see below). They are the same paths as before.
 5. `vercel.json` schedules `/api/cron/scheduler` every 15 minutes. **Vercel Hobby only allows daily crons** - use Pro for the 15-minute schedule (or point any external pinger at the endpoint with the `Authorization: Bearer $CRON_SECRET` header).
@@ -59,7 +59,7 @@ Same planner, pick **Instagram** when creating a post (or filter the calendar by
 - Account must be an Instagram **Business or Creator** account (switch in Instagram → Settings → Account type).
 - Posts need media: JPEG photos (up to 10 carousel panels) or 1 MP4 (published as a Reel). Caption max 2200 chars. PNG/GIF are not supported by Instagram.
 - Photos outside Instagram's supported aspect ratio (4:5 to 1.91:1) are automatically split into ordered carousel panels without cropping the original.
-- **Instagram downloads your media from a public URL**. With Vercel Blob (production) this is automatic. With local-disk media (development), `localhost` and private/login-protected tunnels cannot work:
+- **Instagram downloads your media from a public URL**. With S3, Vercel Blob, or GridFS on Vercel, the app provides a public HTTPS media URL. With local-disk media (development), `localhost` and private/login-protected tunnels cannot work:
   set `PUBLIC_URL` to an anonymous public HTTPS URL that reaches this app (e.g. an ngrok tunnel to port 3000), which serves `/uploads`, and use the same base for the OAuth redirect: `{PUBLIC_URL}/api/instagram/callback`.
 - Setup: developers.facebook.com → create app (type *Business*) → add product **Instagram** → *API setup with Instagram login* →
   add the redirect URI above, copy the **Instagram app ID / secret** into `INSTAGRAM_APP_ID` / `INSTAGRAM_APP_SECRET`,
@@ -71,7 +71,7 @@ Same planner, pick **Instagram** when creating a post (or filter the calendar by
 ## Facebook Pages
 Connect with Meta OAuth, grant access to one or more managed Pages, then choose the Page that should receive posts.
 Facebook personal profiles are not supported. The Facebook integration publishes text, JPEG/PNG photos (up to 10),
-photo collections, and MP4 video. Media is delivered through public URLs (Vercel Blob in production; `PUBLIC_URL` for local-disk media - the same requirement as Instagram).
+photo collections, and MP4 video. Media is delivered through public URLs (S3, GridFS, or Vercel Blob in production; `PUBLIC_URL` for local-disk media - the same requirement as Instagram).
 
 Create a Meta app at developers.facebook.com, configure Facebook Login, and register
 `{APP_URL}/api/facebook/callback` as the OAuth redirect URI. Set `FACEBOOK_APP_ID`,
@@ -90,5 +90,5 @@ them together with a `groupId`, so:
 
 ## Notes
 - LinkedIn access tokens are AES-256-GCM encrypted at rest (key derived from `JWT_SECRET` - don't rotate it without reconnecting users).
-- Media lives in Vercel Blob (or `UPLOAD_DIR` locally, served at `/uploads/<uuid>`).
+- Media lives in S3, Vercel Blob, MongoDB GridFS on Vercel, or `UPLOAD_DIR` locally (served at `/uploads/<uuid>`).
 - Claiming due posts is atomic in Mongo, so overlapping scheduler runs / several instances are safe.
