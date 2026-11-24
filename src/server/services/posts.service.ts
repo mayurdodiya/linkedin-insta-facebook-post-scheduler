@@ -436,12 +436,25 @@ export class PostsService {
 
       const content = input.content !== undefined ? input.content.trim() : post.content;
 
+      // Optional network changes: `platforms` lists the networks the post should end up on.
+      // Unpublished copies on unlisted networks are removed, listed networks without a copy get a
+      // new one. Published copies are never touched. Without `platforms` nothing changes.
+      const desired = input.platforms !== undefined ? this.parsePlatforms(input.platforms) : null;
+      const groupPlatforms = new Set(group.map((p) => this.parsePlatform(p.platform)));
+      const toRemove = desired ? editable.filter((p) => !desired.includes(this.parsePlatform(p.platform))) : [];
+      const toAdd = desired ? desired.filter((pl) => !groupPlatforms.has(pl)) : [];
+      const keep = editable.filter((p) => !toRemove.includes(p));
+      if (keep.length + toAdd.length === 0) {
+        throw new BadRequestException('Keep at least one network to publish to (or delete the post)');
+      }
+
       const remove = new Set([input.removeMedia ?? []].flat());
       const kept = post.media.filter((m) => !remove.has(m.filename));
       const removedFiles = post.media.filter((m) => remove.has(m.filename));
       const media = [...kept, ...this.toMedia(files)];
       // the same copy is published to every network in the group, so validate it for all of them
-      for (const p of editable) this.validateContent(this.parsePlatform(p.platform), content, media);
+      const targetPlatforms = [...keep.map((p) => this.parsePlatform(p.platform)), ...toAdd];
+      for (const platform of targetPlatforms) this.validateContent(platform, content, media);
 
       let scheduledAt = post.scheduledAt;
       if (input.scheduledAt) {
@@ -449,18 +462,39 @@ export class PostsService {
       }
       const rescheduled = scheduledAt.getTime() !== post.scheduledAt.getTime();
       // failed posts need a future slot when they are put back in the queue
-      if ((rescheduled || editable.some((p) => p.status === 'failed')) && scheduledAt.getTime() <= Date.now()) {
+      if (
+        (rescheduled || toAdd.length > 0 || keep.some((p) => p.status === 'failed')) &&
+        scheduledAt.getTime() <= Date.now()
+      ) {
         throw new BadRequestException('Pick a slot in the future');
       }
 
-      const ids = editable.map((p) => p._id);
+      const ids = keep.map((p) => p._id);
       const clash = await this.model.exists({
         userId,
         scheduledAt,
-        platform: { $in: editable.map((p) => p.platform) },
+        platform: { $in: targetPlatforms },
         _id: { $nin: ids },
       });
       if (clash) throw new ConflictException('You already have a post in that time slot');
+
+      // copies for newly added networks join the same composed post
+      const groupId = post.groupId ?? new Types.ObjectId().toHexString();
+      let added: PostDocument[] = [];
+      if (toAdd.length > 0) {
+        try {
+          added = await this.model.insertMany(
+            toAdd.map((platform) => ({ userId, platform, groupId, content, scheduledAt, timezone, media })),
+            { ordered: true },
+          );
+        } catch (e) {
+          await this.model.deleteMany({ _id: { $in: added.map((a) => a._id) } });
+          if ((e as { code?: number }).code === 11000) {
+            throw new ConflictException('You already have a post in that time slot');
+          }
+          throw e;
+        }
+      }
 
       // edit the whole composed post at once (published copies are left untouched)
       await this.model.updateMany(
@@ -470,14 +504,18 @@ export class PostsService {
           media,
           scheduledAt,
           timezone,
+          groupId,
           status: 'scheduled',
           attempts: 0,
           $unset: { lastError: 1, lockedAt: 1, retryAfter: 1 },
         },
       );
+      if (toRemove.length > 0) {
+        await this.model.deleteMany({ _id: { $in: toRemove.map((p) => p._id) } });
+      }
       await this.deleteFilesIfUnused(removedFiles);
 
-      const updated = await this.model.findById(post._id);
+      const updated = await this.model.findById(toRemove.some((p) => p.id === post.id) ? ids[0] ?? added[0]._id : post._id);
       if (!updated) throw new NotFoundException('Post not found');
       return this.toDto(updated);
     } catch (e) {

@@ -201,7 +201,7 @@ export function PostModal({
     mutationFn: async () => {
       const fd = new FormData();
       fd.append('content', content);
-      if (!post) fd.append('platforms', platforms.join(','));
+      fd.append('platforms', platforms.join(','));
       if (!bulk) {
         for (const f of files) fd.append('media', await shrinkImage(f));
       }
@@ -370,7 +370,7 @@ export function PostModal({
         </div>
 
         <div className="modal-body">
-        {!post && (
+        {(!post || !locked) && (
           <div>
             <div className="label">Post to</div>
             <div className="plat-checks" role="group" aria-label="Post to">
@@ -378,9 +378,11 @@ export function PostModal({
                 const isConnected = connected.includes(p);
                 const on = platforms.includes(p);
                 // an already-saved post may target a network that was later disconnected: let it be unticked
-                const disabled = !isConnected && !on;
+                // a copy that is already published (or being published) can't be taken back
+                const sent = group.some((g) => g.platform === p && (g.status === 'published' || g.status === 'publishing'));
+                const disabled = sent || (!isConnected && !on);
                 return (
-                  <label key={p} className={`plat-check${on ? ' on' : ''}${disabled ? ' pending' : ''}`}>
+                  <label key={p} className={`plat-check${on ? ' on' : ''}${disabled && !sent ? ' pending' : ''}`}>
                     <input
                       type="checkbox"
                       checked={on}
@@ -389,7 +391,11 @@ export function PostModal({
                     />
                     <span className="plat-text">
                       <span className="plat-name">{PLATFORM_LABEL[p]}</span>
-                      {!isConnected && <span className="plat-status">Not connected</span>}
+                      {sent ? (
+                        <span className="plat-status">Published</span>
+                      ) : (
+                        !isConnected && <span className="plat-status">Not connected</span>
+                      )}
                     </span>
                   </label>
                 );

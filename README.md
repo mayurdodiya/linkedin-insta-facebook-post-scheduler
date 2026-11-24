@@ -44,7 +44,7 @@ Locally media goes to `UPLOAD_DIR` (served at `/uploads/<file>`) and the schedul
 4. Register the redirect URIs with `{APP_URL}` as the base (see below). They are the same paths as before.
 5. `vercel.json` schedules `/api/cron/scheduler` every 15 minutes. **Vercel Hobby only allows daily crons** - use Pro for the 15-minute schedule (or point any external pinger at the endpoint with the `Authorization: Bearer $CRON_SECRET` header).
 
-Vercel limits to be aware of: a function request body is capped at ~4.5 MB, so uploads larger than that (big photos/videos) will be rejected on Vercel; the 100 MB `MAX_UPLOAD_MB` only applies to self-hosting. Publishing routes allow up to 300 s per request.
+Vercel limits to be aware of: a function request body is capped at ~4.5 MB, so large JPEG/PNG photos are downscaled in the browser before upload, but videos larger than that will be rejected on Vercel; the 100 MB `MAX_UPLOAD_MB` only applies to self-hosting. Publishing routes allow up to 300 s per request.
 
 ### OAuth apps
 - **Google** (console.cloud.google.com → Credentials → OAuth client, Web): redirect URI `{APP_URL}/api/auth/google/callback` (locally `http://localhost:3000/...`)
@@ -53,6 +53,44 @@ Vercel limits to be aware of: a function request body is capped at ~4.5 MB, so u
   LinkedIn member tokens last ~60 days; the dashboard shows the days left and users reconnect when it expires.
 
 For production set `APP_URL` to the public URL and register those redirect URIs (`BACKEND_URL` is still read as a fallback; `FRONTEND_URL` is no longer used).
+
+## Integration setup cheat sheet (callback URLs & Meta config)
+Callback pattern: `{APP_URL}/api/<network>/callback` - production `https://<your-app>.vercel.app`, local `http://localhost:3000`.
+- URIs must match **exactly** (no trailing slash). Type them by hand; pasted URLs can carry hidden characters (red icon in Meta).
+- After changing env vars on Vercel, **redeploy**.
+
+| Env var | Used for |
+|---|---|
+| `APP_URL` | Base for all callbacks |
+| `PUBLIC_URL` | Optional public base for the Instagram callback and media URLs (never a tunnel URL in production) |
+| `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` | LinkedIn |
+| `INSTAGRAM_APP_ID` / `INSTAGRAM_APP_SECRET` | Instagram (the *Instagram* app ID, not the main Meta app ID) |
+| `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` | Facebook (main Meta app ID, App settings → Basic) |
+
+Never commit real secrets - keep `.env.example` as placeholders.
+
+**LinkedIn**
+- Products: *Sign In with LinkedIn using OpenID Connect* + *Share on LinkedIn*.
+- Redirect URL: `{APP_URL}/api/linkedin/callback`; scopes `openid profile email w_member_social`.
+- Token ~60 days; user reconnects from the dashboard.
+
+**Instagram** (Instagram API with Instagram Login)
+- Meta app → use case *Manage messaging & content on Instagram* → *API setup with Instagram login*.
+- Redirect URI `{APP_URL}/api/instagram/callback` goes in **Business login settings → OAuth redirect URIs** (save it).
+- Scopes: `instagram_business_basic`, `instagram_business_content_publish`; account must be Business/Creator.
+- App unpublished → only users with a role can connect: add them as **Instagram Tester** and accept the invite in Instagram.
+- The 2FA prompt at Instagram login is controlled by the Instagram account, not this app.
+
+**Facebook Pages**
+- Meta app → *Add use cases* → Content management → **Manage everything on your Page**; add permissions `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`.
+- Redirect URI `{APP_URL}/api/facebook/callback` goes in **Facebook Login for Business → Settings → Valid OAuth Redirect URIs** (Client OAuth login + Web OAuth login = Yes; strict mode on).
+- Connecting user must be **Admin of the Page** and have a role on the Meta app.
+- App in Development mode → posts are visible only to users with an app role; switch to **Live** (Privacy Policy URL, possibly App Review) to make them public.
+
+**Common errors**
+- `Invalid redirect_uri` / `redirect_uri_mismatch` → URI not registered, or `APP_URL` / `PUBLIC_URL` points to another host.
+- `... integration is not configured on the server` → missing `*_APP_ID` / `*_SECRET`, or no redeploy.
+- `413 Request Entity Too Large` → upload over ~4.5 MB on Vercel (see limits above).
 
 ## Instagram
 Same planner, pick **Instagram** when creating a post (or filter the calendar by platform). Uses the *Instagram API with Instagram Login*.
