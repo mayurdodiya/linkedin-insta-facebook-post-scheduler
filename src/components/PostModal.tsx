@@ -22,6 +22,7 @@ import { CloseIcon } from './Icons.tsx';
 import { ClearButton, PasteButton } from './PasteButton.tsx';
 import { useConfirm, type ConfirmItem } from './ConfirmDialog.tsx';
 import { MediaPreview } from './MediaPreview.tsx';
+import { shrinkImage } from '../shrinkImage.ts';
 import { BulkPlanner, duplicateDates, resolveDates, revokeImages, type BulkDay } from './BulkPlanner.tsx';
 
 const MAX_IMAGES = 9;
@@ -201,17 +202,19 @@ export function PostModal({
       const fd = new FormData();
       fd.append('content', content);
       if (!post) fd.append('platforms', platforms.join(','));
-      if (!bulk) files.forEach((f) => fd.append('media', f));
+      if (!bulk) {
+        for (const f of files) fd.append('media', await shrinkImage(f));
+      }
       if (bulk) {
         // one slot + caption per day; assignments[] tells which day each photo (in upload order) belongs to
-        days.forEach((d, k) => {
-          d.images.forEach((img) => {
-            fd.append('media', img.file);
+        for (const [k, d] of days.entries()) {
+          for (const img of d.images) {
+            fd.append('media', await shrinkImage(img.file));
             fd.append('assignments', String(k));
-          });
+          }
           fd.append('scheduledAts', bulkSlot(k).toISOString());
           fd.append('captions', d.caption);
-        });
+        }
         return (await api.post<BulkResult>('/posts/bulk', fd)).data;
       }
       if (instant) return api.post('/posts/instant', fd);
