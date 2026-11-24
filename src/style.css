@@ -2093,3 +2093,32 @@ body { max-width: 100%; overflow-x: clip; }
 }
 @keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .modal, .modal.bulk { animation: none; } }
+
+/* ---------- phone polish: dashboard + page headers (UI only) ---------- */
+@media (max-width: 700px) {
+  /* page title on top, its buttons as one full-width row underneath */
+  .page-head { flex-direction: column; align-items: stretch; gap: 0.85rem; }
+  .page-head h1 { font-size: 1.7rem; }
+  .page-head .actions { width: 100%; flex-wrap: nowrap; gap: 0.5rem; }
+  .page-head .actions .btn { flex: 1 1 0; justify-content: center; white-space: nowrap; min-height: 44px; }
+
+  /* Scheduled / Published / Failed: three compact tiles in one row */
+  .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.55rem; }
+  .stats .stat {
+    display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start;
+    gap: 0.45rem; padding: 0.8rem 0.75rem; text-align: left;
+  }
+  .stats .stat .stat-icon { width: 30px; height: 30px; margin: 0; border-radius: 10px; }
+  .stats .stat .stat-icon svg { width: 16px; height: 16px; }
+  .stats .stat .num { font-size: 1.55rem; }
+  .stats .stat .stat-label { margin: 0; font-size: 0.74rem; }
+
+  /* "Coming up": icon + title/description on top, full-width button below */
+  .section-head { flex-wrap: wrap; align-items: flex-start; gap: 0.7rem; }
+  .section-head .grow { flex: 1 1 0; min-width: 0; }
+  .section-head .grow h2 { font-size: 1.05rem; }
+  .section-head > .btn { flex: 1 1 100%; justify-content: center; min-height: 44px; }
+
+  /* upcoming list rows */
+  .list li { gap: 0.6rem; }
+}
