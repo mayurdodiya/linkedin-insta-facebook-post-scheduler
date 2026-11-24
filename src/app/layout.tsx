@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import '../tailwind.css';
 import '../style.css';
@@ -9,6 +9,9 @@ export const metadata: Metadata = {
   description: 'Plan a month of LinkedIn and Instagram posts in minutes with a beautiful visual calendar.',
   icons: { icon: { url: '/favicon.svg', type: 'image/svg+xml' } },
 };
+
+// viewport-fit=cover lets the mobile layout use the full screen and respect the notch / home bar
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' };
 
 // Apply the saved theme (or the OS preference) before paint so there is no flash.
 const themeScript = `(function () {

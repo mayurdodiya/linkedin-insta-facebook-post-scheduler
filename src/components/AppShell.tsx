@@ -136,6 +136,28 @@ export default function AppShell({ children }: { children: ReactNode }) {
           {children}
         </div>
       </main>
+
+      {/* phone-only bottom tab bar (hidden on desktop by CSS); same destinations as the sidebar */}
+      <nav className="tabbar" aria-label="Main">
+        {[
+          { href: '/dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
+          { href: '/planner', label: 'Plan', icon: <CalendarIcon /> },
+          { href: '/schedule', label: 'Schedule', icon: <Table2 /> },
+        ].map((t) => {
+          const active = pathname.startsWith(t.href);
+          return (
+            <Link
+              key={t.href}
+              href={t.href}
+              className={`tab${active ? ' active' : ''}`}
+              aria-current={active ? 'page' : undefined}
+            >
+              <span className="tab-ico">{t.icon}</span>
+              <span className="tab-label">{t.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
     </div>
     </TooltipProvider>
   );

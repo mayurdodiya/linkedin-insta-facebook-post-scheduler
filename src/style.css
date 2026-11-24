@@ -2009,3 +2009,87 @@ body { max-width: 100%; overflow-x: clip; }
   .sch-actions { width: 100%; }
   .sch-actions .btn { flex: 1 1 0; min-height: 40px; }
 }
+
+/* ============================================================
+   Native-app feel on phones (UI only) - keep at the very end.
+   Bottom tab bar, compact top bar, bottom-sheet popups, touch polish.
+   ============================================================ */
+.tabbar { display: none; }
+
+@media (max-width: 900px) {
+  html { -webkit-tap-highlight-color: transparent; }
+  a, button, label, summary, [role='button'] { touch-action: manipulation; }
+
+  /* ---- top app bar: brand left, quick actions right; navigation moves to the bottom ---- */
+  .sidebar {
+    padding: calc(0.5rem + env(safe-area-inset-top)) calc(0.9rem + env(safe-area-inset-right)) 0.5rem calc(0.9rem + env(safe-area-inset-left));
+    gap: 0.5rem;
+  }
+  .side-nav, .side-collapse { display: none; }
+  .brand-name { display: block; font-size: 1.02rem; }
+  .brand-sub { display: none; }
+  .brand-mark { width: 34px; height: 34px; border-radius: 11px; }
+  .side-foot { margin: 0 0 0 auto; gap: 0.4rem; }
+  .theme-toggle, .side-logout { width: 38px; height: 38px; border-radius: 12px; }
+
+  /* ---- content leaves room for the tab bar ---- */
+  .container { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+
+  /* ---- bottom tab bar ---- */
+  .tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    display: flex; align-items: stretch; justify-content: space-around;
+    padding: 0.35rem calc(0.5rem + env(safe-area-inset-right)) calc(0.35rem + env(safe-area-inset-bottom)) calc(0.5rem + env(safe-area-inset-left));
+    background: var(--glass-strong);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    backdrop-filter: blur(24px) saturate(160%);
+    border-top: 1px solid var(--glass-border);
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.08);
+  }
+  .tab {
+    flex: 1 1 0; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.15rem;
+    padding: 0.3rem 0.25rem; border-radius: 14px;
+    color: var(--muted); text-decoration: none;
+    transition: color 0.15s ease, transform 0.12s ease;
+  }
+  .tab-ico {
+    display: grid; place-items: center;
+    width: 52px; height: 30px; border-radius: 999px;
+    transition: background 0.18s ease;
+  }
+  .tab-ico svg { width: 22px; height: 22px; }
+  .tab-label { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.01em; line-height: 1.1; }
+  .tab.active { color: var(--ink); }
+  .tab.active .tab-ico { background: var(--bg-2); box-shadow: inset 0 0 0 1px var(--line-2); }
+  .tab.active .tab-label { font-weight: 700; }
+  .tab:active { transform: scale(0.94); }
+
+  /* pressed feedback instead of hover on touch */
+  .btn:active:not(:disabled), .nav-item:active, .chip:active { transform: scale(0.97); }
+
+  /* softer, app-like cards */
+  .card, .channel, .stat { border-radius: 20px; }
+
+  /* popups hide the tab bar so the sheet owns the screen */
+  body:has(.overlay) .tabbar { display: none; }
+}
+
+/* ---- popups become bottom sheets ---- */
+@media (max-width: 700px) {
+  .overlay { padding: 0; align-items: end; place-items: end stretch; }
+  .modal, .modal.bulk {
+    width: 100%; max-width: 100%; margin: 0;
+    max-height: 92dvh; border-radius: 22px 22px 0 0;
+    animation: sheet-up 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .modal::before {
+    content: ''; display: block; flex: none;
+    width: 38px; height: 4px; margin: 8px auto 0; border-radius: 999px;
+    background: var(--line); opacity: 0.9;
+  }
+  .modal-foot { padding-bottom: calc(0.8rem + env(safe-area-inset-bottom)); }
+  .modal-foot .btn { min-height: 44px; }
+}
+@keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .modal, .modal.bulk { animation: none; } }
